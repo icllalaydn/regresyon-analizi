@@ -1,3 +1,5 @@
+HTML dosyamı GitHub Pages üzerinden görmek için [buraya tıklayın](https://icllalaydn.github.io/regresyon-analizi/regresyon_analızı.html).
+
 ## Regresyon Analizi Projesi: Öğrenci Başarısının Tahmini
 
 Bu proje, öğrencilerin final notlarını (G3) tahmin etmek amacıyla bir regresyon modeli oluşturmayı ve bu modelin varsayımlarını test etmeyi hedeflemektedir. Veri seti olarak `student_data.csv` kullanılmıştır.
