@@ -1,0 +1,185 @@
+---
+title: "regresyon ödev1"
+author: "İclal"
+date: "23 03 2025"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+#Student_data veri setiyle çalışıyorum.Amacım öğrencilerin final notunu (G3) bağımlı değişken olarak alıp, diğer değişkenlerle nasıl ilişkili   olduğunu analiz etmek.
+data <- read.csv("student_data.csv", header = TRUE, sep = ",")
+head(data)
+summary(data)
+```
+
+```{r}
+sum(is.na(data)) # eksik gözlemim yok
+
+# Modelde kullanacağım değişkenleri seçiyorum
+model_data <- data[, c("G1", "G2", "studytime", "absences", "failures", "G3")]
+
+# Modeli kurmaya başlıyorum
+  model <- lm(G3~ G1 + G2 + studytime + absences + failures , data = model_data)
+  summary(model) # modelim anlamlı çıktı
+
+```
+## Şimdi varsayımlara başlıyoruz ##
+### Normallik varsayımı ### 
+
+```{r}
+
+artık <- residuals(model)
+qqnorm(artık)
+qqline(artık)
+
+```
+
+
+```{r}
+library(olsrr)
+ols_test_normality(model)# hazır teste göre modelim normallik varsayımına uydu 
+
+```
+
+
+```{r}
+# Şimdi de değişkenlik varyanslılık varsayımlarına başlıyoruz
+library(ggplot2)
+fitted <- fitted(model)
+dataf <- data.frame(fitted,artık)
+ggplot(dataf,aes(x=fitted,y=artık))+geom_point()+geom_hline(yintercept=0)
+
+# BP teste geçiyoruz
+library(lmtest)
+bptest(model) # p-value 0.05ten küçük geldi değişen varyans durumu vardır
+
+hata_kare <- artık^2
+model2 <- lm(hata_kare~.-G3,data = data)
+summary(model2)
+
+```
+ 
+ 
+```{r}
+# white teste geçiyoruz
+fitted_kare <- fitted^2
+model3 <- lm(hata_kare~fitted+fitted_kare)
+summary(model3) # değişen varyanslılık durumu vardır
+
+```
+
+## Aykırı Değerlerin Belirlenmesi ##
+
+```{r}
+#leverage ile başlıyoruz
+library(faraway)
+n <- nrow(data)
+hi <- hatvalues(model)
+p <- sum(hi)
+cut <- 2*p/n
+halfnorm(hi,5)
+abline(h=cut)
+
+which(hi>cut)
+# potansiyel leverage değerlerini görüyoruz
+```
+
+
+```{r}
+# outlier ile devam ediyoruz
+library(faraway)
+rstud <- rstudent(model)
+cut <- qt(1-0.05/(2*n),n-p-1)
+halfnorm(rstud)
+abline(h=cut)
+
+which(abs(rstud)>cut)
+length(which(abs(rstud)>cut))
+
+library(olsrr)
+ols_test_outlier(model)  # 7 outlier görüldü
+
+```
+
+
+## ETKİLİ GÖZLEM ## 
+
+```{r}
+# cook's distance ile başlayalım
+cook <- cooks.distance(model)
+cut1 <- qf(0.5,p,n-p)
+cut2 <- 1   # n > 100 ise cut point değeri 1 olarak da kullanılabilir
+halfnorm(cook)
+abline(h=cut1)
+abline(h=cut2)
+# hiçbir line eklemedi cook's distance metriğine göre etkili gözlem yok
+
+```
+
+
+```{r}
+# DF fit
+dffit <- dffits(model)
+cut <- 2*sqrt(p/n)
+halfnorm(dffit) # en etkili gözlem 277 ve 141
+abline(h=cut)
+which(abs(dffit)>cut)
+length(which(abs(dffit)>cut))
+```
+
+
+
+## MULTİCOLLİNEARTY ##
+```{r}
+# korelasyon matrisi
+x <- model.matrix(model)[,-1]
+cordata <- cor(x)
+library(corrplot)
+corrplot(cordata,method="number") 
+# 0.85 değeri var yüksek korelasyon ama bu multicollinearty sorunu var,yok demeye yetmez
+
+```
+
+
+```{r}
+# VIF bakıyoruz
+library(car)
+vif(model) # 10'u aşan değer yok fakat bazı kaynaklar 4'ü kesim noktası olarak belirliyor
+# Güven verici değil koşul indeksi ile devam ederiz
+
+```
+
+
+```{r}
+# Koşul indeksi
+ozdeg <- eigen(t(x)%*%x)$values 
+# kappa > 30 ise orta derecede, k > 100den buyukse güçlü multicollinearty
+k <- sqrt(max(ozdeg)/min(ozdeg))
+k # k degeri 22.99653 geldi multicollinearty yoktur
+
+```
+
+
+```{r}
+# Yine de yukarıdaki sonuçlardan emin olamazsak verimizi test-train olarak ayırıp 
+# test ve train set üzerinden karşılaştırma yaparak karar verebiliriz
+# veriyi test train olarak ayrıştıralım
+library(fpp2)
+set.seed(123)
+index <- sample(1:n,round(0.85*n))
+train <- data[index,]
+test <- data[-index,]
+
+mod1 <- lm(G3~.,train) 
+accuracy(predict(mod1,test),test$G3)  
+accuracy(mod1)
+# Eğitim setinde model çok iyi performans gösteriyor ancak test setinde kötü performans sergiliyor.
+# Modelin test setinde kötü performans göstermesi genellikle multicollinearity nedeniyle olur
+
+```
+
+
